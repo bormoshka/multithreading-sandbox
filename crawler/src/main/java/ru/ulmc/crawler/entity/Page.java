@@ -1,20 +1,17 @@
 package ru.ulmc.crawler.entity;
 
+import lombok.*;
 import org.jsoup.nodes.Element;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NonNull;
-
 import static java.time.LocalDateTime.now;
 
 @Getter
 @Builder
+@ToString
 @EqualsAndHashCode(of = {"url", "visitDate"})
 public class Page {
     @NonNull

@@ -9,7 +9,7 @@
         </layout>
     </appender>
 
-    <logger name="ru.ulmc" level="debug"
+    <logger name="ru.ulmc" level="trace"
             additivity="false">
         <appender-ref ref="STDOUT" />
     </logger>

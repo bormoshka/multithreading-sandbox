@@ -1,9 +1,14 @@
-package ru.ulmc.crawler.client;
+package ru.ulmc.crawler.client.tasks;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import ru.ulmc.crawler.client.FutureStore;
+import ru.ulmc.crawler.entity.Page;
 
 import java.io.IOException;
 import java.net.URI;
@@ -14,19 +19,14 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import ru.ulmc.crawler.entity.Page;
-
 @Slf4j
-public class UrlExtractor implements Runnable {
+public class UriExtractingTask implements Runnable {
 
     private final BlockingQueue<String> inputUrlQueue;
     private BlockingQueue<Page> outputPageBlockingQueue;
 
-    public UrlExtractor(BlockingQueue<String> inputUrlQueue,
-                        BlockingQueue<Page> outputPageBlockingQueue) {
+    public UriExtractingTask(BlockingQueue<String> inputUrlQueue,
+                             BlockingQueue<Page> outputPageBlockingQueue) {
         this.inputUrlQueue = inputUrlQueue;
         this.outputPageBlockingQueue = outputPageBlockingQueue;
     }
@@ -75,8 +75,8 @@ public class UrlExtractor implements Runnable {
             }
         }
 
-        log.info("internalLinks {}", internalLinks);
-        log.info("externalLinks {}", externalLinks);
+        log.trace("internalLinks {}", internalLinks);
+        log.trace("externalLinks {}", externalLinks);
         return new PageSources(body, internalLinks, externalLinks);
     }
 
@@ -84,10 +84,14 @@ public class UrlExtractor implements Runnable {
     public void run() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
+                log.trace("Taking uri from queue");
                 String take = inputUrlQueue.take();
-                Page page = Store.getInstance().compute(take, this::extract).get();
+                log.trace("Took uri from queue {}", take);
+                Page page = FutureStore.getInstance().compute(take, this::extract).get();
+                log.trace("Extracted Page {}", take);
                 if (page != null) {
                     outputPageBlockingQueue.put(page);
+                    scheduleExtracting(page);
                 }
             } catch (InterruptedException e) {
                 log.info("Extractor task was interrupted");
@@ -96,6 +100,15 @@ public class UrlExtractor implements Runnable {
                 log.error("Extractor stopped with exception", e);
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    private void scheduleExtracting(Page page) throws InterruptedException {
+        for (String s : page.getInternalUrls()) {
+            inputUrlQueue.put(s);
+        }
+        for (String s : page.getExternalUrls()) {
+            inputUrlQueue.put(s);
         }
     }
 
