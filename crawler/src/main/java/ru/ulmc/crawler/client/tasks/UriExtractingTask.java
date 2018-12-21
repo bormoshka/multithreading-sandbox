@@ -87,7 +87,7 @@ public class UriExtractingTask implements Runnable {
                 log.trace("Taking uri from queue");
                 String take = inputUrlQueue.take();
                 log.trace("Took uri from queue {}", take);
-                Page page = FutureStore.getInstance().compute(take, this::extract).get();
+                Page page = FutureStore.getInstance().compute(take, this::extract);
                 log.trace("Extracted Page {}", take);
                 if (page != null) {
                     outputPageBlockingQueue.put(page);
@@ -96,9 +96,6 @@ public class UriExtractingTask implements Runnable {
             } catch (InterruptedException e) {
                 log.info("Extractor task was interrupted");
                 Thread.currentThread().interrupt();
-            } catch (ExecutionException e) {
-                log.error("Extractor stopped with exception", e);
-                throw new RuntimeException(e);
             }
         }
     }
