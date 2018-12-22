@@ -1,20 +1,18 @@
 package ru.ulmc.crawler.client;
 
-import java.util.Collection;
+import lombok.extern.slf4j.Slf4j;
+import ru.ulmc.crawler.entity.StaticPage;
+
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.function.Function;
-
-import lombok.extern.slf4j.Slf4j;
-import ru.ulmc.crawler.entity.Page;
 
 @Slf4j
 public final class FutureStore {
     private static volatile FutureStore instance = new FutureStore();
-    private final ConcurrentHashMap<String, FutureTask<Page>> visitedUrls = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, FutureTask<StaticPage>> visitedUrls = new ConcurrentHashMap<>();
 
     private FutureStore() {
     }
@@ -23,13 +21,13 @@ public final class FutureStore {
         return instance;
     }
 
-    public Page compute(String url, Function<String, Page> task) {
+    public StaticPage compute(String url, Function<String, StaticPage> task) {
         while (true) {
             try {
-                FutureTask<Page> pageFuture = visitedUrls.get(url);
+                FutureTask<StaticPage> pageFuture = visitedUrls.get(url);
                 if (pageFuture == null) {
                     log.trace("Putting to the futureStore {}", url);
-                    FutureTask<Page> newTask = getFutureTask(url, task);
+                    FutureTask<StaticPage> newTask = getFutureTask(url, task);
                     pageFuture = visitedUrls.putIfAbsent(url, newTask);
                     if (pageFuture == null) {
                         pageFuture = newTask;
@@ -50,7 +48,7 @@ public final class FutureStore {
 
     }
 
-    private FutureTask<Page> getFutureTask(String url, Function<String, Page> task) {
+    private FutureTask<StaticPage> getFutureTask(String url, Function<String, StaticPage> task) {
         return new FutureTask<>(() -> task.apply(url));
     }
 }

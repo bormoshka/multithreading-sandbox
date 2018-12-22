@@ -1,119 +1,104 @@
 package ru.ulmc.crawler.client.tasks;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Connection;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
+import ru.ulmc.crawler.client.CrawlerManager;
 import ru.ulmc.crawler.client.FutureStore;
-import ru.ulmc.crawler.entity.Page;
+import ru.ulmc.crawler.client.TaskType;
+import ru.ulmc.crawler.client.tools.BlackList;
+import ru.ulmc.crawler.client.tools.PageSources;
+import ru.ulmc.crawler.client.tools.StaticHtmlBodyParser;
+import ru.ulmc.crawler.entity.StaticPage;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class UriExtractingTask implements Runnable {
 
     private final BlockingQueue<String> inputUrlQueue;
-    private BlockingQueue<Page> outputPageBlockingQueue;
+    private final StaticHtmlBodyParser staticHtmlBodyParser;
+    private BlockingQueue<StaticPage> outputPageBlockingQueue;
+    private BlackList blackList;
 
     public UriExtractingTask(BlockingQueue<String> inputUrlQueue,
-                             BlockingQueue<Page> outputPageBlockingQueue) {
+                             BlockingQueue<StaticPage> outputPageBlockingQueue,
+                             BlackList blackList) {
         this.inputUrlQueue = inputUrlQueue;
         this.outputPageBlockingQueue = outputPageBlockingQueue;
+        this.blackList = blackList;
+        this.staticHtmlBodyParser = new StaticHtmlBodyParser();
     }
 
-    public Page extract(String url) {
+    public StaticPage extract(String url) {
         try {
+
             URI uri = new URI(url);
-            PageSources sources = preparePageSources(uri);
-            return buildPage(uri, sources);
+            if (blackList.inBlackList(uri.getHost())) {
+                return null;
+            }
+            Optional<PageSources> sources = staticHtmlBodyParser.preparePageSources(uri);
+            return sources.map(pageSources -> buildPage(uri, pageSources)).orElse(null);
         } catch (IOException | URISyntaxException e) {
             log.error("Something goes wrong", e);
         }
         return null;
     }
 
-    private Page buildPage(URI uri, PageSources sources) {
-        return Page.builder()
+    private StaticPage buildPage(URI uri, PageSources sources) {
+        return StaticPage.builder()
                 .url(uri.toString())
                 .domain(uri.getHost())
-                .externalUrls(sources.getExternalLinks())
-                .internalUrls(sources.getInternalLinks())
+                .links(sources.getLinks())
                 .body(sources.getBody())
                 .build();
     }
 
-    private PageSources preparePageSources(URI uri) throws IOException, URISyntaxException {
-        Element body;
-        Connection connect = Jsoup.connect(uri.toString());
-
-        body = connect.execute().parse().body();
-        Elements links = body.getAllElements().select("a");
-
-        List<String> internalLinks = new ArrayList<>();
-        List<String> externalLinks = new ArrayList<>();
-
-        for (String href : links.eachAttr("href")) {
-            if (href.startsWith("http")) {
-                URI hrefUri = new URI(href);
-                if (hrefUri.getHost().equals(uri.getHost())) {
-                    internalLinks.add(href);
-                } else {
-                    externalLinks.add(href);
-                }
-            } else {
-                internalLinks.add(new URL(new URL(uri.toString()), href).toString());
-            }
-        }
-
-        log.trace("internalLinks {}", internalLinks);
-        log.trace("externalLinks {}", externalLinks);
-        return new PageSources(body, internalLinks, externalLinks);
-    }
-
     @Override
     public void run() {
+        Thread.currentThread().setName("UriExtractingTask");
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                log.trace("Taking uri from queue");
-                String take = inputUrlQueue.take();
-                log.trace("Took uri from queue {}", take);
-                Page page = FutureStore.getInstance().compute(take, this::extract);
-                log.trace("Extracted Page {}", take);
-                if (page != null) {
-                    outputPageBlockingQueue.put(page);
-                    scheduleExtracting(page);
-                }
+                doTheJob();
+                TimeUnit.MILLISECONDS.sleep(10);
             } catch (InterruptedException e) {
                 log.info("Extractor task was interrupted");
                 Thread.currentThread().interrupt();
+                CrawlerManager.getInstance().askForStop(TaskType.values());
             }
         }
     }
 
-    private void scheduleExtracting(Page page) throws InterruptedException {
-        for (String s : page.getInternalUrls()) {
-            inputUrlQueue.put(s);
+    private void doTheJob() throws InterruptedException {
+
+        String take = pollNext();
+
+        StaticPage page = FutureStore.getInstance().compute(take, this::extract);
+        if (page != null) {
+            log.trace("Extracted Page {}", page.getUrl());
+            outputPageBlockingQueue.put(page);
+            scheduleExtracting(page);
         }
-        for (String s : page.getExternalUrls()) {
+    }
+
+    private String pollNext() throws InterruptedException {
+        log.trace("Taking uri from queue");
+        String take = inputUrlQueue.poll(5, TimeUnit.SECONDS);
+        log.trace("Took uri from queue {}", take);
+        if (take == null) {
+            CrawlerManager.getInstance().askForStop(TaskType.values());
+            log.info("No more URIs. Stopping.");
+        }
+        return take;
+    }
+
+    private void scheduleExtracting(StaticPage page) throws InterruptedException {
+        for (String s : page.getLinks()) {
             inputUrlQueue.put(s);
         }
     }
 
-    @Getter
-    @AllArgsConstructor
-    private static class PageSources {
-        private Element body;
-        private List<String> internalLinks;
-        private List<String> externalLinks;
-    }
 }

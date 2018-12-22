@@ -26,7 +26,7 @@ public class DownloadTask implements Runnable {
                         String downloadPath,
                         int maxDownloads) {
         this.lootBlockingQueue = outputQueue;
-        dir = new File(downloadPath);
+        dir = new File(downloadPath );
         this.maxDownloads = maxDownloads;
         checkDir(downloadPath);
     }
@@ -41,27 +41,31 @@ public class DownloadTask implements Runnable {
     }
 
     private void process(Loot loot) throws InterruptedException, IOException {
+        log.trace("Looting {}", loot);
         URL url = new URL(loot.getUri());
-        String filename = dir.getAbsolutePath() + url.getFile();
-        filename = getFilename(filename);
+        String filename = dir.getAbsolutePath() + "\\" + loot.getLootName();
+        if (exists(filename)) {
+            log.debug("File exists: {}", filename);
+            return;
+        }
         try (ReadableByteChannel channel = Channels.newChannel(url.openStream());
              FileOutputStream fileOutputStream = new FileOutputStream(filename);
              FileChannel fileChannel = fileOutputStream.getChannel()) {
+
             fileChannel.transferFrom(channel, 0, Long.MAX_VALUE);
+        } catch (IOException ex) {
+            log.trace("File not found or other errors {} {}", url, ex.getMessage());
         }
     }
 
-    private String getFilename(String filename) {
-        File file = new File(filename);
-        while(file.exists()) {
-            file = new File(file.getAbsolutePath() + "_" + System.nanoTime());
-        }
-        return file.getAbsolutePath();
+    private boolean exists(String filename) {
+        return new File(filename).exists();
     }
 
 
     @Override
     public void run() {
+        Thread.currentThread().setName("DownloadTask");
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 tryToStop();
@@ -72,6 +76,7 @@ public class DownloadTask implements Runnable {
                 Thread.currentThread().interrupt();
             } catch (IOException e) {
                 log.error("DownloadTask stopped with exception", e);
+                CrawlerManager.getInstance().stop();
                 throw new RuntimeException(e);
             } catch (RuntimeException e) {
                 if (e.getCause() instanceof InterruptedException) {
@@ -79,6 +84,7 @@ public class DownloadTask implements Runnable {
                     Thread.currentThread().interrupt();
                     return;
                 }
+                CrawlerManager.getInstance().stop();
                 log.error("DownloadTask stopped with unknown exception", e);
                 throw e;
             }

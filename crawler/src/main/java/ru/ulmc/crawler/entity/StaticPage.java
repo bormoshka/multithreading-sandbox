@@ -11,9 +11,9 @@ import static java.time.LocalDateTime.now;
 
 @Getter
 @Builder
-@ToString
+@ToString(exclude = "body")
 @EqualsAndHashCode(of = {"url", "visitDate"})
-public class Page {
+public class StaticPage {
     @NonNull
     private final String url;
     @Builder.Default
@@ -23,10 +23,7 @@ public class Page {
     private final String domain;
     @Builder.Default
     @NonNull
-    private final List<String> internalUrls = Collections.emptyList();
-    @Builder.Default
-    @NonNull
-    private final List<String> externalUrls = Collections.emptyList();
+    private final List<String> links = Collections.emptyList();
 
     private final Element body;
 
