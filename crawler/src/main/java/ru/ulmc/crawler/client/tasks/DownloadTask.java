@@ -3,6 +3,7 @@ package ru.ulmc.crawler.client.tasks;
 import lombok.extern.slf4j.Slf4j;
 import ru.ulmc.crawler.client.CrawlerManager;
 import ru.ulmc.crawler.client.TaskType;
+import ru.ulmc.crawler.client.tools.CrawlingConfig;
 import ru.ulmc.crawler.entity.Loot;
 
 import java.io.File;
@@ -23,12 +24,11 @@ public class DownloadTask implements Runnable {
     private static final AtomicInteger filesDownloaded = new AtomicInteger();
 
     public DownloadTask(BlockingQueue<Loot> outputQueue,
-                        String downloadPath,
-                        int maxDownloads) {
+                        CrawlingConfig config) {
         this.lootBlockingQueue = outputQueue;
-        dir = new File(downloadPath );
-        this.maxDownloads = maxDownloads;
-        checkDir(downloadPath);
+        dir = new File(config.getExportPath());
+        this.maxDownloads = config.getMaxDownloads();
+        checkDir(dir.getAbsolutePath());
     }
 
     private void checkDir(String downloadPath) {
@@ -65,7 +65,7 @@ public class DownloadTask implements Runnable {
 
     @Override
     public void run() {
-        Thread.currentThread().setName("DownloadTask");
+     //   Thread.currentThread().setName("DownloadTask");
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 tryToStop();

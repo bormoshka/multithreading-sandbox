@@ -6,17 +6,29 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 public class BlackList {
-    private final Set<String> exclusions = new CopyOnWriteArraySet<>();
+    private final Set<String> exclusions;
 
-    public void load() throws URISyntaxException, IOException {
-        URL resource = getClass().getClassLoader().getResource("exclusions.txt");
-        List<String> excl = FileUtils.readLines(new File(resource.toURI()), "UTF-8");
-        exclusions.addAll(excl);
+    private BlackList(Collection<String> exclusions) {
+        this.exclusions = Collections.unmodifiableSet(new HashSet<>(exclusions));
+    }
+
+    public static BlackList loadDefaults() {
+        URL resource = BlackList.class.getClassLoader().getResource("exclusions.txt");
+        try {
+            List<String> excl = FileUtils.readLines(new File(resource.toURI()), "UTF-8");
+            return new BlackList(excl);
+        } catch (IOException | URISyntaxException e) {
+            throw new RuntimeException("Misconfiguration!", e);
+        }
+
     }
 
     public boolean inBlackList(String host) {

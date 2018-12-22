@@ -3,6 +3,7 @@ package ru.ulmc.crawler.client;
 import lombok.extern.slf4j.Slf4j;
 import ru.ulmc.crawler.entity.StaticPage;
 
+import java.util.Optional;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -12,7 +13,7 @@ import java.util.function.Function;
 @Slf4j
 public final class FutureStore {
     private static volatile FutureStore instance = new FutureStore();
-    private final ConcurrentHashMap<String, FutureTask<StaticPage>> visitedUrls = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, FutureTask<Optional<StaticPage>>> visitedUrls = new ConcurrentHashMap<>();
 
     private FutureStore() {
     }
@@ -21,13 +22,13 @@ public final class FutureStore {
         return instance;
     }
 
-    public StaticPage compute(String url, Function<String, StaticPage> task) {
-        while (true) {
+    public Optional<StaticPage> compute(String url, Function<String, Optional<StaticPage>> task) throws InterruptedException {
+        while (!Thread.currentThread().isInterrupted()) {
             try {
-                FutureTask<StaticPage> pageFuture = visitedUrls.get(url);
+                FutureTask<Optional<StaticPage>> pageFuture = visitedUrls.get(url);
                 if (pageFuture == null) {
                     log.trace("Putting to the futureStore {}", url);
-                    FutureTask<StaticPage> newTask = getFutureTask(url, task);
+                    FutureTask<Optional<StaticPage>> newTask = getFutureTask(url, task);
                     pageFuture = visitedUrls.putIfAbsent(url, newTask);
                     if (pageFuture == null) {
                         pageFuture = newTask;
@@ -42,13 +43,14 @@ public final class FutureStore {
             } catch (ExecutionException e) {
                 throw new RuntimeException(e.getCause());
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
+                throw e;
             }
         }
-
+        return null; //should not happen
     }
 
-    private FutureTask<StaticPage> getFutureTask(String url, Function<String, StaticPage> task) {
+    private FutureTask<Optional<StaticPage>> getFutureTask(String url, Function<String, Optional<StaticPage>> task) {
         return new FutureTask<>(() -> task.apply(url));
     }
 }

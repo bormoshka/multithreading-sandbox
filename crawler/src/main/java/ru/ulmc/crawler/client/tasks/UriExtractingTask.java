@@ -6,6 +6,7 @@ import ru.ulmc.crawler.client.FutureStore;
 import ru.ulmc.crawler.client.TaskType;
 import ru.ulmc.crawler.client.tools.BlackList;
 import ru.ulmc.crawler.client.tools.PageSources;
+import ru.ulmc.crawler.client.tools.CrawlingConfig;
 import ru.ulmc.crawler.client.tools.StaticHtmlBodyParser;
 import ru.ulmc.crawler.entity.StaticPage;
 
@@ -21,31 +22,32 @@ public class UriExtractingTask implements Runnable {
 
     private final BlockingQueue<String> inputUrlQueue;
     private final StaticHtmlBodyParser staticHtmlBodyParser;
+    private CrawlingConfig config;
     private BlockingQueue<StaticPage> outputPageBlockingQueue;
     private BlackList blackList;
 
     public UriExtractingTask(BlockingQueue<String> inputUrlQueue,
                              BlockingQueue<StaticPage> outputPageBlockingQueue,
-                             BlackList blackList) {
+                             CrawlingConfig config) {
         this.inputUrlQueue = inputUrlQueue;
         this.outputPageBlockingQueue = outputPageBlockingQueue;
-        this.blackList = blackList;
-        this.staticHtmlBodyParser = new StaticHtmlBodyParser();
+        this.blackList = config.getBlackList();
+        this.staticHtmlBodyParser = new StaticHtmlBodyParser(config);
+        this.config = config;
     }
 
-    public StaticPage extract(String url) {
+    public Optional<StaticPage> extract(String url) {
         try {
-
             URI uri = new URI(url);
             if (blackList.inBlackList(uri.getHost())) {
-                return null;
+                return Optional.empty();
             }
             Optional<PageSources> sources = staticHtmlBodyParser.preparePageSources(uri);
-            return sources.map(pageSources -> buildPage(uri, pageSources)).orElse(null);
+            return sources.map(pageSources -> buildPage(uri, pageSources));
         } catch (IOException | URISyntaxException e) {
             log.error("Something goes wrong", e);
         }
-        return null;
+        return Optional.empty();
     }
 
     private StaticPage buildPage(URI uri, PageSources sources) {
@@ -59,11 +61,11 @@ public class UriExtractingTask implements Runnable {
 
     @Override
     public void run() {
-        Thread.currentThread().setName("UriExtractingTask");
+       // Thread.currentThread().setName("UriExtractingTask");
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 doTheJob();
-                TimeUnit.MILLISECONDS.sleep(10);
+                TimeUnit.MILLISECONDS.sleep(config.getUriExtractingTimeout());
             } catch (InterruptedException e) {
                 log.info("Extractor task was interrupted");
                 Thread.currentThread().interrupt();
@@ -76,8 +78,9 @@ public class UriExtractingTask implements Runnable {
 
         String take = pollNext();
 
-        StaticPage page = FutureStore.getInstance().compute(take, this::extract);
-        if (page != null) {
+        Optional<StaticPage> optionalPage = FutureStore.getInstance().compute(take, this::extract);
+        if (optionalPage.isPresent()) {
+            StaticPage page = optionalPage.get();
             log.trace("Extracted Page {}", page.getUrl());
             outputPageBlockingQueue.put(page);
             scheduleExtracting(page);
@@ -89,7 +92,7 @@ public class UriExtractingTask implements Runnable {
         String take = inputUrlQueue.poll(5, TimeUnit.SECONDS);
         log.trace("Took uri from queue {}", take);
         if (take == null) {
-            CrawlerManager.getInstance().askForStop(TaskType.values());
+            CrawlerManager.getInstance().stop();
             log.info("No more URIs. Stopping.");
         }
         return take;

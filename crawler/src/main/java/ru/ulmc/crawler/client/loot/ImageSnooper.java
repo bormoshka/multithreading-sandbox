@@ -1,24 +1,28 @@
 package ru.ulmc.crawler.client.loot;
 
-import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import ru.ulmc.crawler.entity.StaticPage;
 
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Set;
+
+import lombok.extern.slf4j.Slf4j;
+import lombok.val;
+import ru.ulmc.crawler.client.tools.CrawlingConfig;
+import ru.ulmc.crawler.entity.StaticPage;
 
 import static ru.ulmc.crawler.client.UrlUtils.getFileExtension;
 
 @Slf4j
 public class ImageSnooper implements LootSnooper {
     private final Set<String> searchExtensions;
+    private CrawlingConfig.SnoopConfig snoopConfig;
 
-    public ImageSnooper(Set<String> extensions) {
-        searchExtensions = extensions;
+    public ImageSnooper(CrawlingConfig.SnoopConfig snoopConfig) {
+        this.snoopConfig = snoopConfig;
+        searchExtensions = snoopConfig.getExtensions();
     }
 
     @Override
@@ -27,7 +31,7 @@ public class ImageSnooper implements LootSnooper {
                 .select("img[src]");
         Elements links = page.getBody().getAllElements()
                 .select("a[href~=.+(.jpe?g|.png)]");
-        List<String> urls = new ArrayList<>();
+        Set<String> urls = new HashSet<>();
         imgs.forEach(element -> filterImagesBySize(urls, element));
         links.forEach(element -> getUrlFromAnchor(urls, element));
         //return urls.stream()
@@ -40,22 +44,30 @@ public class ImageSnooper implements LootSnooper {
         return urls;
     }
 
-    private boolean getUrlFromAnchor(List<String> urls, Element element) {
+    private boolean getUrlFromAnchor(Set<String> urls, Element element) {
         String href = element.absUrl("href");
-        if (href.isEmpty()) {
+        if (href.trim().isEmpty()) {
             return false;
         }
         return urls.add(href);
     }
 
-    private void filterImagesBySize(List<String> urls, Element element) {
+    private void filterImagesBySize(Set<String> urls, Element element) {
+        val dimentionOptional = snoopConfig.getMinimumDimention();
+        if (!dimentionOptional.isPresent()) {
+            return;
+        }
+        val dimention = dimentionOptional.get();
         String width = element.attr("width");
         if (width.isEmpty()) {
             return;
         }
-        int widthInt = Integer.parseInt(width.replace("\\w", ""));
-        if (widthInt > 500) {
-            urls.add(element.attr("abs:src"));
+        int widthInt = Integer.parseInt(width.replace("\\D", ""));
+        if (widthInt > dimention.getRight()) {
+            String attr = element.attr("abs:src");
+            if (!attr.trim().isEmpty()) {
+                urls.add(attr);
+            }
         } else {
             log.trace("Skipping small image");
         }
