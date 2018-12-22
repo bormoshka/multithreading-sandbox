@@ -52,17 +52,17 @@ public class ImageSnooper implements LootSnooper {
     }
 
     private void filterImagesBySize(Set<String> urls, Element element) {
-        val dimentionOptional = snoopConfig.getMinimumDimension();
-        if (!dimentionOptional.isPresent()) {
+        val dimensionOptional = snoopConfig.getMinimumDimension();
+        if (!dimensionOptional.isPresent()) {
             return;
         }
-        val dimention = dimentionOptional.get();
+        val dimension = dimensionOptional.get();
         String width = element.attr("width");
         if (width.isEmpty()) {
             return;
         }
         int widthInt = Integer.parseInt(width.replaceAll("\\D", ""));
-        if (widthInt > dimention.getRight()) {
+        if (widthInt > dimension.getRight()) {
             String attr = element.attr("abs:src");
             if (!attr.trim().isEmpty()) {
                 urls.add(attr);
