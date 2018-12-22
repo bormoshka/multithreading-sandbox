@@ -1,35 +1,32 @@
 package ru.ulmc.crawler.client.tasks;
 
+import lombok.extern.slf4j.Slf4j;
+import ru.ulmc.crawler.client.Crawler;
+import ru.ulmc.crawler.client.event.EventBus;
+import ru.ulmc.crawler.client.event.TaskEvent;
+import ru.ulmc.crawler.client.tools.QueueHolder;
+import ru.ulmc.crawler.client.tools.monitoring.Counters;
+
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
-import lombok.extern.slf4j.Slf4j;
-import ru.ulmc.crawler.client.CrawlerManager;
-import ru.ulmc.crawler.client.TaskType;
-import ru.ulmc.crawler.entity.Loot;
-import ru.ulmc.crawler.entity.StaticPage;
-
-import static ru.ulmc.crawler.client.TaskType.MONITORING;
+import static ru.ulmc.crawler.client.tasks.TaskType.MONITORING;
+import static ru.ulmc.crawler.client.event.TaskEvent.EventType.READ_FROM_QUEUE;
 
 @Slf4j
 public class MonitoringTask implements Runnable {
-    private final Queue<StaticPage> pageQueue;
-    private final Queue<Loot> lootQueue;
-    private final Queue<String> uriQueue;
     private final Map<TaskType, List<Future<?>>> futureMap;
+    private final QueueHolder queueHolder;
+    private final EventBus eventBus;
+    private final Counters counters = new Counters();
+    private long lastTimeChecked = 0;
 
-    public MonitoringTask(BlockingQueue<StaticPage> pageBlockingQueue,
-                          BlockingQueue<Loot> lootBlockingQueue,
-                          BlockingQueue<String> uriBlockingQueue,
-                          Map<TaskType, List<Future<?>>> map) {
-        this.pageQueue = pageBlockingQueue;
-        this.lootQueue = lootBlockingQueue;
-        this.uriQueue = uriBlockingQueue;
-        this.futureMap = map;
+    public MonitoringTask(QueueHolder queueHolder, Map<TaskType, List<Future<?>>> futureMap, EventBus eventBus) {
+
+        this.queueHolder = queueHolder;
+        this.futureMap = futureMap;
+        this.eventBus = eventBus;
     }
 
     @Override
@@ -37,8 +34,8 @@ public class MonitoringTask implements Runnable {
         //   Thread.currentThread().setName("MonitoringTask");
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                monitorState();
-                TimeUnit.MILLISECONDS.sleep(500);
+                processEvent();
+                doChecks();
             } catch (InterruptedException e) {
                 log.info("Sleep interrupted");
                 Thread.currentThread().interrupt();
@@ -46,16 +43,44 @@ public class MonitoringTask implements Runnable {
         }
     }
 
+    private void doChecks() {
+        long fromLastCall = System.currentTimeMillis() - lastTimeChecked;
+        if (fromLastCall > 500) {
+            printState();
+            monitorState();
+            lastTimeChecked = System.currentTimeMillis();
+        }
+    }
+
+    private void processEvent() throws InterruptedException {
+        TaskEvent event = eventBus.take();
+        if (event.getEventType() == READ_FROM_QUEUE) {
+            counters.increment(event.getTaskType());
+        }
+    }
+
+    private void printState() {
+        int uriQueueSize = queueHolder.getUriBlockingQueue().size();
+        int pageQueueSize = queueHolder.getPageBlockingQueue().size();
+        int lootQueueSize = queueHolder.getLootBlockingQueue().size();
+        log.info("Queues  \t| url: {} page: {} loot: {}",
+                wrap(uriQueueSize), wrap(pageQueueSize), wrap(lootQueueSize));
+        log.info("Counters\t| url: {} page: {} loot: {}",
+                wrap(counters.getTakenUris()), wrap(counters.getTakenPages()), wrap(counters.getTakenLoots()));
+    }
+
+    private String wrap(Object object) {
+        return String.format("%8s", object);
+    }
+
     private void monitorState() {
-        log.info("Queues | url: {} page: {} loot: {}",
-                uriQueue.size(), pageQueue.size(), lootQueue.size());
         this.futureMap.forEach((type, futures) -> {
             if (type != MONITORING) {
                 boolean hasRunningTask = futures.stream()
                         .anyMatch(future -> !future.isCancelled() && !future.isDone());
-                if(!hasRunningTask) {
+                if (!hasRunningTask) {
                     log.info("No running task for type {} found", type);
-                    CrawlerManager.getInstance().stop();
+                    Crawler.getInstance().stop();
                 }
             }
         });

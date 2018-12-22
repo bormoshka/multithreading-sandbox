@@ -5,8 +5,7 @@ import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-
-import ru.ulmc.crawler.client.UrlUtils;
+import ru.ulmc.crawler.entity.PageSources;
 
 import java.io.IOException;
 import java.net.URI;
@@ -15,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static ru.ulmc.crawler.client.UrlUtils.isImageUri;
+import static ru.ulmc.crawler.client.tools.UrlUtils.isImageUri;
 
 @Slf4j
 public class StaticHtmlBodyParser {

@@ -1,4 +1,4 @@
-package ru.ulmc.crawler.client;
+package ru.ulmc.crawler.client.tools;
 
 import lombok.extern.slf4j.Slf4j;
 

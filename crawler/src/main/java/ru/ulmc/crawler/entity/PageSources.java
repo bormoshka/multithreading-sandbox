@@ -1,4 +1,4 @@
-package ru.ulmc.crawler.client.tools;
+package ru.ulmc.crawler.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

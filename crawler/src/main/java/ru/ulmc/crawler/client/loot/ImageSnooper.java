@@ -1,19 +1,18 @@
 package ru.ulmc.crawler.client.loot;
 
+import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import ru.ulmc.crawler.client.tools.CrawlingConfig;
+import ru.ulmc.crawler.entity.StaticPage;
 
 import java.net.URL;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
-import lombok.extern.slf4j.Slf4j;
-import lombok.val;
-import ru.ulmc.crawler.client.tools.CrawlingConfig;
-import ru.ulmc.crawler.entity.StaticPage;
-
-import static ru.ulmc.crawler.client.UrlUtils.getFileExtension;
+import static ru.ulmc.crawler.client.tools.UrlUtils.getFileExtension;
 
 @Slf4j
 public class ImageSnooper implements LootSnooper {
@@ -53,7 +52,7 @@ public class ImageSnooper implements LootSnooper {
     }
 
     private void filterImagesBySize(Set<String> urls, Element element) {
-        val dimentionOptional = snoopConfig.getMinimumDimention();
+        val dimentionOptional = snoopConfig.getMinimumDimension();
         if (!dimentionOptional.isPresent()) {
             return;
         }
@@ -62,7 +61,7 @@ public class ImageSnooper implements LootSnooper {
         if (width.isEmpty()) {
             return;
         }
-        int widthInt = Integer.parseInt(width.replace("\\D", ""));
+        int widthInt = Integer.parseInt(width.replaceAll("\\D", ""));
         if (widthInt > dimention.getRight()) {
             String attr = element.attr("abs:src");
             if (!attr.trim().isEmpty()) {

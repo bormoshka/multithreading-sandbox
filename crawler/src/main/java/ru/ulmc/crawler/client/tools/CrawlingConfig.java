@@ -1,31 +1,29 @@
 package ru.ulmc.crawler.client.tools;
 
+import lombok.Builder;
+import lombok.Getter;
+import lombok.val;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.http.client.utils.URLEncodedUtils;
-import org.eclipse.jetty.util.UrlEncoded;
+import ru.ulmc.crawler.client.loot.ImageSnooper;
+import ru.ulmc.crawler.client.loot.LootSnooper;
 
-import java.net.URLEncoder;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
-import lombok.Builder;
-import lombok.Getter;
-import ru.ulmc.crawler.client.loot.ImageSnooper;
-import ru.ulmc.crawler.client.loot.LootSnooper;
-
 import static java.util.Arrays.asList;
 import static java.util.Collections.singleton;
 import static java.util.Collections.unmodifiableSet;
+import static org.eclipse.jetty.util.UrlEncoded.encodeString;
 
 public class CrawlingConfig {
     private static final BlackList defaultBlackList = BlackList.loadDefaults();
     @Getter
     private final String keywords;
     @Getter
-    private final String entryUri;
+    private final Set<String> entryUris;
     @Getter
     private final String exportPath;
     @Getter
@@ -42,7 +40,7 @@ public class CrawlingConfig {
 
     @Builder
     private CrawlingConfig(String keywords,
-                           String entryUri,
+                           Set<String> entryUris,
                            String exportPath,
                            Collection<String> extensions,
                            ImmutablePair<Integer, Integer> minDimention,
@@ -50,61 +48,78 @@ public class CrawlingConfig {
                            BlackList blackList,
                            int maxDownloads, int uriExtractingTimeout) {
         this.keywords = keywords;
-        this.entryUri = entryUri;
+        this.entryUris = unmodifiableSet(new HashSet<>(entryUris));
         this.exportPath = exportPath;
         this.maxDownloads = maxDownloads;
         this.blackList = blackList;
         this.uriExtractingTimeout = uriExtractingTimeout;
         this.snoopConfig = SnoopConfig.builder()
                 .extensions(unmodifiableSet(new HashSet<>(extensions)))
-                .minDimention(minDimention)
-                .maxDimention(maxDimention)
+                .minDimension(minDimention)
+                .maxDimension(maxDimention)
                 .build();
         this.snoopers = unmodifiableSet(singleton(new ImageSnooper(snoopConfig)));
     }
 
     public static CrawlingConfig simpleGoogle(String keywords,
-                                              ImmutablePair<Integer, Integer> minDimention,
+                                              ImmutablePair<Integer, Integer> minDimension,
                                               String exportPath) {
-        return CrawlingConfig.builder()
-                .blackList(defaultBlackList)
-                .keywords(keywords)
-                .entryUri("https://www.google.com/search?safe=off&q=" + UrlEncoded.encodeString(keywords))
-                .extensions(asList("jpg", "jpeg", "png", "gif"))
-                .minDimention(minDimention)
-                .maxDownloads(10000)
-                .uriExtractingTimeout(100)
-                .exportPath(exportPath).build();
+        return getDefault(keywords, minDimension, exportPath, 100, singleton(getGoogle(keywords)));
+    }
+
+    private static String getGoogle(String keywords) {
+        return "https://www.google.com/search?safe=off&q=" + encodeString(keywords);
     }
 
     public static CrawlingConfig simpleYandex(String keywords,
-                                              ImmutablePair<Integer, Integer> minDimention,
+                                              ImmutablePair<Integer, Integer> minDimension,
                                               String exportPath) {
+        return getDefault(keywords, minDimension, exportPath, 300, singleton(getYandex(keywords)));
+    }
+
+
+    public static CrawlingConfig complex(String keywords,
+                                         ImmutablePair<Integer, Integer> minDimension,
+                                         String exportPath) {
+        val entryPoints = new HashSet<>(asList(getYandex(keywords), getGoogle(keywords)));
+        return getDefault(keywords, minDimension, exportPath, 300, entryPoints);
+    }
+
+    private static CrawlingConfig getDefault(String keywords,
+                                             ImmutablePair<Integer, Integer> minDimension,
+                                             String exportPath,
+                                             int timeout,
+                                             Set<String> entryPoints) {
         return CrawlingConfig.builder()
                 .blackList(defaultBlackList)
                 .keywords(keywords)
-                .entryUri("https://yandex.ru/search/?text=" + UrlEncoded.encodeString(keywords))
+                .entryUris(entryPoints)
                 .extensions(asList("jpg", "jpeg", "png", "gif"))
-                .minDimention(minDimention)
+                .minDimention(minDimension)
                 .maxDownloads(10000)
-                .uriExtractingTimeout(100)
-                .exportPath(exportPath).build();
+                .uriExtractingTimeout(timeout)
+                .exportPath(exportPath + encodeString(keywords))
+                .build();
     }
 
+
+    private static String getYandex(String keywords) {
+        return "https://yandex.ru/search/?text=" + encodeString(keywords);
+    }
 
     @Builder
     public static class SnoopConfig {
         @Getter
         private final Set<String> extensions;
-        private final ImmutablePair<Integer, Integer> minDimention;
-        private final ImmutablePair<Integer, Integer> maxDimention;
+        private final ImmutablePair<Integer, Integer> minDimension;
+        private final ImmutablePair<Integer, Integer> maxDimension;
 
-        public Optional<Pair<Integer, Integer>> getMinimumDimention() {
-            return Optional.ofNullable(minDimention);
+        public Optional<Pair<Integer, Integer>> getMinimumDimension() {
+            return Optional.ofNullable(minDimension);
         }
 
-        public Optional<Pair<Integer, Integer>> getMaximumDimention() {
-            return Optional.ofNullable(maxDimention);
+        public Optional<Pair<Integer, Integer>> getMaximumDimension() {
+            return Optional.ofNullable(maxDimension);
         }
     }
 }

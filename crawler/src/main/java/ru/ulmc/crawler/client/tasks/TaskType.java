@@ -1,4 +1,4 @@
-package ru.ulmc.crawler.client;
+package ru.ulmc.crawler.client.tasks;
 
 public enum TaskType {
     EXTRACT,

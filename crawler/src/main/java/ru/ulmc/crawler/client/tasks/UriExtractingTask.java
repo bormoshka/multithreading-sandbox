@@ -1,13 +1,11 @@
 package ru.ulmc.crawler.client.tasks;
 
 import lombok.extern.slf4j.Slf4j;
-import ru.ulmc.crawler.client.CrawlerManager;
-import ru.ulmc.crawler.client.FutureStore;
-import ru.ulmc.crawler.client.TaskType;
-import ru.ulmc.crawler.client.tools.BlackList;
-import ru.ulmc.crawler.client.tools.PageSources;
-import ru.ulmc.crawler.client.tools.CrawlingConfig;
-import ru.ulmc.crawler.client.tools.StaticHtmlBodyParser;
+import ru.ulmc.crawler.client.Crawler;
+import ru.ulmc.crawler.client.event.EventBus;
+import ru.ulmc.crawler.client.event.TaskEvent;
+import ru.ulmc.crawler.client.tools.*;
+import ru.ulmc.crawler.entity.PageSources;
 import ru.ulmc.crawler.entity.StaticPage;
 
 import java.io.IOException;
@@ -17,26 +15,31 @@ import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import static ru.ulmc.crawler.client.event.TaskEvent.EventType.READ_FROM_QUEUE;
+import static ru.ulmc.crawler.client.event.TaskEvent.EventType.WRITE_TO_QUEUE;
+
 @Slf4j
 public class UriExtractingTask implements Runnable {
 
     private final BlockingQueue<String> inputUrlQueue;
     private final StaticHtmlBodyParser staticHtmlBodyParser;
+    private final BlockingQueue<StaticPage> outputPageBlockingQueue;
     private CrawlingConfig config;
-    private BlockingQueue<StaticPage> outputPageBlockingQueue;
+    private EventBus eventBus;
     private BlackList blackList;
 
-    public UriExtractingTask(BlockingQueue<String> inputUrlQueue,
-                             BlockingQueue<StaticPage> outputPageBlockingQueue,
+    public UriExtractingTask(QueueHolder queueHolder,
+                             EventBus eventBus,
                              CrawlingConfig config) {
-        this.inputUrlQueue = inputUrlQueue;
-        this.outputPageBlockingQueue = outputPageBlockingQueue;
+        this.inputUrlQueue = queueHolder.getUriBlockingQueue();
+        this.outputPageBlockingQueue = queueHolder.getPageBlockingQueue();
+        this.eventBus = eventBus;
         this.blackList = config.getBlackList();
         this.staticHtmlBodyParser = new StaticHtmlBodyParser(config);
         this.config = config;
     }
 
-    public Optional<StaticPage> extract(String url) {
+    private Optional<StaticPage> extract(String url) {
         try {
             URI uri = new URI(url);
             if (blackList.inBlackList(uri.getHost())) {
@@ -61,7 +64,7 @@ public class UriExtractingTask implements Runnable {
 
     @Override
     public void run() {
-       // Thread.currentThread().setName("UriExtractingTask");
+        // Thread.currentThread().setName("UriExtractingTask");
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 doTheJob();
@@ -69,16 +72,19 @@ public class UriExtractingTask implements Runnable {
             } catch (InterruptedException e) {
                 log.info("Extractor task was interrupted");
                 Thread.currentThread().interrupt();
-                CrawlerManager.getInstance().askForStop(TaskType.values());
+                Crawler.getInstance().askForStop(TaskType.values());
             }
         }
     }
 
     private void doTheJob() throws InterruptedException {
-
         String take = pollNext();
-
-        Optional<StaticPage> optionalPage = FutureStore.getInstance().compute(take, this::extract);
+        pushEvent(READ_FROM_QUEUE);
+        FutureStore futureStore = FutureStore.getInstance();
+        if (futureStore.isAlreadyParsed(take)) {
+            return;
+        }
+        Optional<StaticPage> optionalPage = futureStore.compute(take, this::extract);
         if (optionalPage.isPresent()) {
             StaticPage page = optionalPage.get();
             log.trace("Extracted Page {}", page.getUrl());
@@ -87,12 +93,19 @@ public class UriExtractingTask implements Runnable {
         }
     }
 
+    private void pushEvent(TaskEvent.EventType eventType) {
+        eventBus.publish(TaskEvent.builder()
+                .eventType(eventType)
+                .taskType(TaskType.EXTRACT)
+                .build());
+    }
+
     private String pollNext() throws InterruptedException {
         log.trace("Taking uri from queue");
         String take = inputUrlQueue.poll(5, TimeUnit.SECONDS);
         log.trace("Took uri from queue {}", take);
         if (take == null) {
-            CrawlerManager.getInstance().stop();
+            Crawler.getInstance().stop();
             log.info("No more URIs. Stopping.");
         }
         return take;
@@ -102,6 +115,7 @@ public class UriExtractingTask implements Runnable {
         for (String s : page.getLinks()) {
             inputUrlQueue.put(s);
         }
+        pushEvent(WRITE_TO_QUEUE);
     }
 
 }

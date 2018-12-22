@@ -1,59 +1,50 @@
 package ru.ulmc.crawler.client;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import ru.ulmc.crawler.client.event.EventBus;
+import ru.ulmc.crawler.client.tasks.*;
+import ru.ulmc.crawler.client.tools.CrawlingConfig;
+import ru.ulmc.crawler.client.tools.QueueHolder;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import lombok.AccessLevel;
-import lombok.NoArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import ru.ulmc.crawler.client.tasks.DownloadTask;
-import ru.ulmc.crawler.client.tasks.MonitoringTask;
-import ru.ulmc.crawler.client.tasks.PageProcessingTask;
-import ru.ulmc.crawler.client.tasks.UriExtractingTask;
-import ru.ulmc.crawler.client.tools.CrawlingConfig;
-import ru.ulmc.crawler.entity.Loot;
-import ru.ulmc.crawler.entity.StaticPage;
-
 import static java.util.concurrent.Executors.newFixedThreadPool;
-import static ru.ulmc.crawler.client.TaskType.DOWNLOAD;
-import static ru.ulmc.crawler.client.TaskType.EXTRACT;
-import static ru.ulmc.crawler.client.TaskType.MONITORING;
-import static ru.ulmc.crawler.client.TaskType.PROCESS;
+import static ru.ulmc.crawler.client.tasks.TaskType.*;
 
 @Slf4j
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
-public class CrawlerManager {
-    private static final CrawlerManager instance = new CrawlerManager();
+public class Crawler {
+    private static final Crawler instance = new Crawler();
 
-    private static final int URI_TASK_PARALLELISM = 1;
+    private static final int URI_TASK_PARALLELISM = 3;
     private static final int PAGE_TASK_PARALLELISM = 4;
-    private static final int DOWNLOAD_TASK_PARALLELISM = 10;
+    private static final int DOWNLOAD_TASK_PARALLELISM = 6;
 
+    private final EventBus eventBus = new EventBus();
     private final Map<TaskType, List<Future<?>>> futureMap = new ConcurrentHashMap<>();
-    private final BlockingQueue<StaticPage> pageBlockingQueue = new LinkedBlockingQueue<>();
-    private final BlockingQueue<Loot> lootBlockingQueue = new LinkedBlockingQueue<>();
-    private final BlockingQueue<String> uriBlockingQueue = new LinkedBlockingQueue<>();
+    private final QueueHolder queueHolder = new QueueHolder();
     private final ExecutorService executor = newFixedThreadPool(
             URI_TASK_PARALLELISM
                     + PAGE_TASK_PARALLELISM
                     + DOWNLOAD_TASK_PARALLELISM);
 
 
-    public static CrawlerManager getInstance() {
+    public static Crawler getInstance() {
         return instance;
     }
 
     public void askForStop(TaskType... stopTasks) {
         for (TaskType stopTask : stopTasks) {
-            if(stopTask == MONITORING) {
+            if (stopTask == MONITORING) {
                 continue;
             }
             askForStop(stopTask);
@@ -69,7 +60,7 @@ public class CrawlerManager {
     }
 
     public void stop() {
-        CrawlerManager.getInstance().askForStop(TaskType.values());
+        askForStop(TaskType.values());
         askForStop(MONITORING);
         executor.shutdown();
         try {
@@ -86,12 +77,12 @@ public class CrawlerManager {
         startTask(PAGE_TASK_PARALLELISM, PROCESS, getPageTask(config));
         startTask(DOWNLOAD_TASK_PARALLELISM, DOWNLOAD, getDownloadTask(config));
 
-        uriBlockingQueue.offer(config.getEntryUri());
-        log.trace("Put uri to queue");
+        config.getEntryUris().forEach(s -> queueHolder.getUriBlockingQueue().offer(s));
+        log.trace("Put entry uris to queue");
     }
 
     private MonitoringTask getMonitoringTask(CrawlingConfig config) {
-        return new MonitoringTask(pageBlockingQueue, lootBlockingQueue, uriBlockingQueue, getFutureMap());
+        return new MonitoringTask(queueHolder, getFutureMap(), eventBus);
     }
 
     private void startTask(int parallelism, TaskType taskType, Runnable task) {
@@ -102,14 +93,14 @@ public class CrawlerManager {
     }
 
     private DownloadTask getDownloadTask(CrawlingConfig config) {
-        return new DownloadTask(lootBlockingQueue, config);
+        return new DownloadTask(queueHolder.getLootBlockingQueue(), config, eventBus);
     }
 
     private UriExtractingTask getUriTask(CrawlingConfig config) {
-        return new UriExtractingTask(uriBlockingQueue, pageBlockingQueue, config);
+        return new UriExtractingTask(queueHolder, eventBus, config);
     }
 
     private PageProcessingTask getPageTask(CrawlingConfig config) {
-        return new PageProcessingTask(pageBlockingQueue, lootBlockingQueue, config);
+        return new PageProcessingTask(queueHolder, eventBus, config);
     }
 }
