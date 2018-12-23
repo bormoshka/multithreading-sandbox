@@ -6,7 +6,9 @@ import org.jsoup.select.Elements;
 import ru.ulmc.crawler.client.tools.CrawlingConfig;
 import ru.ulmc.crawler.entity.StaticPage;
 
+import java.io.UnsupportedEncodingException;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -39,7 +41,12 @@ public class AnchorSnooper implements LootSnooper {
     }
 
     private boolean getUrlFromAnchor(Set<String> urls, Element element) {
-        String href = element.absUrl("href");
+        String href = null;
+        try {
+            href = URLDecoder.decode(element.absUrl("href"), "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
         if (href.trim().isEmpty()) {
             return false;
         }
