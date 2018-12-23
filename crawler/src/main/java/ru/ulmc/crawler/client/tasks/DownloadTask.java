@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static java.lang.Thread.currentThread;
 import static ru.ulmc.crawler.client.event.TaskEvent.EventType.READ_FROM_QUEUE;
 
 @Slf4j
@@ -38,11 +39,10 @@ public class DownloadTask implements Runnable {
         exporter.export(loot);
     }
 
-
     @Override
     public void run() {
-        //   Thread.currentThread().setName("DownloadTask");
-        while (!Thread.currentThread().isInterrupted()) {
+        currentThread().setName("DownloadTask-" + currentThread().getId());
+        while (!currentThread().isInterrupted()) {
             try {
                 tryToStop();
                 Loot loot = lootBlockingQueue.take();
@@ -50,7 +50,7 @@ public class DownloadTask implements Runnable {
                 process(loot);
             } catch (InterruptedException e) {
                 log.info("DownloadTask was interrupted");
-                Thread.currentThread().interrupt();
+                currentThread().interrupt();
             } catch (IOException e) {
                 log.error("DownloadTask stopped with exception", e);
                 Crawler.getInstance().stop();
@@ -58,7 +58,7 @@ public class DownloadTask implements Runnable {
             } catch (RuntimeException e) {
                 if (e.getCause() instanceof InterruptedException) {
                     log.info("DownloadTask was interrupted");
-                    Thread.currentThread().interrupt();
+                    currentThread().interrupt();
                     return;
                 }
                 Crawler.getInstance().stop();
@@ -73,7 +73,6 @@ public class DownloadTask implements Runnable {
             Crawler.getInstance().askForStop(TaskType.EXTRACT, TaskType.PROCESS, TaskType.DOWNLOAD);
         }
     }
-
 
     private void pushEvent(TaskEvent.EventType eventType) {
         TaskEvent event = TaskEvent.builder()

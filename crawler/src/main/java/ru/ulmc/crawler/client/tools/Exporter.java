@@ -10,21 +10,22 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import static java.nio.charset.Charset.defaultCharset;
 
 @Slf4j
 public class Exporter {
     private final static Pattern fileExtension = Pattern.compile("^(\\.[a-zA-Z0-9]{2,4}).*$");
     private final CrawlingConfig config;
     private final File dir;
+    private final File exportLog;
 
     public Exporter(CrawlingConfig config) {
         this.config = config;
         dir = new File(config.getExportPath());
         checkDir(dir.getAbsolutePath());
+        exportLog = new File(dir, "export.log");
     }
 
     private void checkDir(String downloadPath) {
@@ -47,10 +48,14 @@ public class Exporter {
 
         try (InputStream inputStream = url.openStream()) {
             FileUtils.copyInputStreamToFile(inputStream, file);
-            FileUtils.write(new File(filename + ".txt"), loot.getUri(), defaultCharset());
+            writeToExportLogFile(url, filename);
         } catch (IOException ex) {
             log.trace("File not found or other errors {} {}", url, ex.getMessage());
         }
+    }
+
+    private void writeToExportLogFile(URL url, String filename) throws IOException {
+        FileUtils.writeLines(exportLog, Collections.singleton(filename + "\t" + url.toString()), true);
     }
 
     public String getLootName(Loot loot) {

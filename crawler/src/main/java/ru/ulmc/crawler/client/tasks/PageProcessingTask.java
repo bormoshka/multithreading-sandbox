@@ -14,9 +14,12 @@ import ru.ulmc.crawler.entity.StaticPage;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.regex.Pattern;
 
+import static java.lang.Thread.currentThread;
 import static ru.ulmc.crawler.client.event.TaskEvent.EventType.READ_FROM_QUEUE;
 import static ru.ulmc.crawler.client.event.TaskEvent.EventType.WRITE_TO_QUEUE;
+import static ru.ulmc.crawler.client.tools.KeywordUtil.wrapToRegexGroup;
 
 @Slf4j
 public class PageProcessingTask implements Runnable {
@@ -25,6 +28,7 @@ public class PageProcessingTask implements Runnable {
     private final EventBus eventBus;
     private final Set<LootSnooper> snoopers;
     private final CrawlingConfig config;
+    private final Pattern regex;
 
     public PageProcessingTask(QueueHolder queueHolder,
                               EventBus eventBus,
@@ -34,12 +38,12 @@ public class PageProcessingTask implements Runnable {
         this.eventBus = eventBus;
         this.snoopers = config.getSnoopers();
         this.config = config;
+        regex = Pattern.compile(wrapToRegexGroup(config.getKeywords()));
     }
 
-
     public void process(StaticPage page) {
-        if (page.getBody().getElementsContainingText(config.getKeywords()).isEmpty()) {
-            return; // no keywords was found on page
+        if (page.getBody().getElementsMatchingText(regex).isEmpty()) {
+            return; // no keywords were found on page
         }
         snoopers.forEach(snooper -> snoop(page, snooper));
     }
@@ -67,6 +71,7 @@ public class PageProcessingTask implements Runnable {
     @Override
     public void run() {
         // Thread.currentThread().setName("PageProcessingTask");
+        currentThread().setName("PageProcessingTask-" + currentThread().getId());
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 StaticPage page = inputPageBlockingQueue.take();

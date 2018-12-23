@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import static java.lang.Thread.currentThread;
 import static ru.ulmc.crawler.client.event.TaskEvent.EventType.READ_FROM_QUEUE;
 import static ru.ulmc.crawler.client.event.TaskEvent.EventType.WRITE_TO_QUEUE;
 
@@ -65,6 +66,7 @@ public class UriExtractingTask implements Runnable {
     @Override
     public void run() {
         // Thread.currentThread().setName("UriExtractingTask");
+        currentThread().setName("UriExtractingTask-" + currentThread().getId());
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 doTheJob();

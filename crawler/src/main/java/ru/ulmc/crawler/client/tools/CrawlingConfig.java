@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.val;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import ru.ulmc.crawler.client.loot.AnchorSnooper;
 import ru.ulmc.crawler.client.loot.ImageSnooper;
 import ru.ulmc.crawler.client.loot.LootSnooper;
 
@@ -58,7 +59,9 @@ public class CrawlingConfig {
                 .minDimension(minDimention)
                 .maxDimension(maxDimention)
                 .build();
-        this.snoopers = unmodifiableSet(singleton(new ImageSnooper(snoopConfig)));
+        this.snoopers = unmodifiableSet(new HashSet<>(
+                asList(new ImageSnooper(snoopConfig),
+                        new AnchorSnooper(snoopConfig))));
     }
 
     public static CrawlingConfig simpleGoogle(String keywords,

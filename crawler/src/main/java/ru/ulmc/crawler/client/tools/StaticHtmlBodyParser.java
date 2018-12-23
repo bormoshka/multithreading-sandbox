@@ -13,17 +13,22 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
+import static ru.ulmc.crawler.client.tools.KeywordUtil.wrapToRegexGroup;
 import static ru.ulmc.crawler.client.tools.UrlUtils.isImageUri;
 
 @Slf4j
 public class StaticHtmlBodyParser {
 
-    public static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36";
-    private CrawlingConfig config;
+    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" +
+            " (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36";
+    private final CrawlingConfig config;
+    private final Pattern regex;
 
     public StaticHtmlBodyParser(CrawlingConfig config) {
         this.config = config;
+        regex = Pattern.compile(wrapToRegexGroup(config.getKeywords()));
     }
 
     public Optional<PageSources> preparePageSources(URI uri) throws IOException, URISyntaxException {
@@ -62,7 +67,7 @@ public class StaticHtmlBodyParser {
     private List<Elements> findLinks(Element body) {
         List<Elements> elementsList = new ArrayList<>(128);
         body.getAllElements().forEach(element -> {
-            Elements a = element.getElementsContainingText(config.getKeywords())
+            Elements a = element.getElementsMatchingText(regex)
                     .select("a");
             if (a != null && !a.isEmpty()) {
                 elementsList.add(a);

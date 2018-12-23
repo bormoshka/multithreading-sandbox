@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 
+import static java.lang.Thread.currentThread;
 import static ru.ulmc.crawler.client.tasks.TaskType.MONITORING;
 import static ru.ulmc.crawler.client.event.TaskEvent.EventType.READ_FROM_QUEUE;
 
@@ -31,7 +32,7 @@ public class MonitoringTask implements Runnable {
 
     @Override
     public void run() {
-        //   Thread.currentThread().setName("MonitoringTask");
+        currentThread().setName("MonitoringTask-" + currentThread().getId());
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 processEvent();

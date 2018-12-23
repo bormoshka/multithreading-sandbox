@@ -28,27 +28,9 @@ public class ImageSnooper implements LootSnooper {
     public Collection<String> sniffOut(StaticPage page) {
         Elements imgs = page.getBody().getAllElements()
                 .select("img[src]");
-        Elements links = page.getBody().getAllElements()
-                .select("a[href~=.+(.jpe?g|.png)]");
         Set<String> urls = new HashSet<>();
         imgs.forEach(element -> filterImagesBySize(urls, element));
-        links.forEach(element -> getUrlFromAnchor(urls, element));
-        //return urls.stream()
-        //        .map(s -> toCorrectUrl(page.getUrl(), s))
-        //        .filter(Optional::isPresent)
-        //        .map(Optional::get)
-        //        .filter(this::matchesExtensions)
-        //        .map(URL::toString)
-        //        .collect(Collectors.toSet());
         return urls;
-    }
-
-    private boolean getUrlFromAnchor(Set<String> urls, Element element) {
-        String href = element.absUrl("href");
-        if (href.trim().isEmpty()) {
-            return false;
-        }
-        return urls.add(href);
     }
 
     private void filterImagesBySize(Set<String> urls, Element element) {
